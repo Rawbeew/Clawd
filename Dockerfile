@@ -19,13 +19,14 @@ USER node
 RUN mkdir -p /home/node/.openclaw/agents/main/sessions /home/node/.openclaw/vault
 WORKDIR /home/node
 
-# 5. AGENT CONFIGURATION (Forced Telegram Boot)
+# 5. AGENT CONFIGURATION (Force-Open all Doors via ENV variables)
 ENV OPENCLAW_MODEL_PRIMARY=gemini-2.5-flash-preview-09-2025
 ENV OPENCLAW_CHANNEL_TELEGRAM_DM_POLICY=open
+ENV OPENCLAW_CHANNEL_TELEGRAM_GROUP_POLICY=open
 ENV OPENCLAW_CHANNEL_TELEGRAM_ENABLED=true
 
-# Create basic config to prevent setup prompts
-RUN echo '{"gateway": {"mode": "local"}, "channels": {"telegram": {"enabled": true}}}' > /home/node/.openclaw/openclaw.json
+# Force-Open all Doors via hardcoded config file (Guarantees the Doctor warning disappears)
+RUN echo '{"gateway": {"mode": "local"}, "channels": {"telegram": {"enabled": true, "dmPolicy": "open", "groupPolicy": "open"}}}' > /home/node/.openclaw/openclaw.json
 
 # 6. THE DIRECT IGNITION ORCHESTRATOR
 RUN cat << 'EOF' > /home/node/orchestrator.js
@@ -38,7 +39,7 @@ console.log("[SYSTEM] Booting Direct Ignition Orchestrator...");
 const port = process.env.PORT || 8000;
 http.createServer((req, res) => {
     res.writeHead(200);
-    res.end("SERF IGNITED");
+    res.end("SERF IGNITED - DOORS WIDE OPEN");
 }).listen(port, '0.0.0.0', () => {
     console.log(`[SYSTEM] Port ${port} Secured.`);
 });
@@ -47,7 +48,7 @@ http.createServer((req, res) => {
 console.log("[SYSTEM] IGNITING TELEGRAM GATEWAY...");
 const gateway = spawn('openclaw', ['gateway', '--force'], { 
     stdio: 'inherit',
-    env: { ...process.env, DEBUG: 'openclaw:*' } // Turn on extreme logging
+    env: { ...process.env, DEBUG: 'openclaw:*' }
 });
 
 gateway.on('close', (code) => {
