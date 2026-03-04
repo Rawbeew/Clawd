@@ -19,20 +19,33 @@ USER node
 RUN mkdir -p /home/node/.openclaw/agents/main/sessions /home/node/.openclaw/vault
 WORKDIR /home/node
 
-# 5. ENVIRONMENT VARIABLES (No Telegram Needed)
+# 5. ENVIRONMENT VARIABLES (Forcing Google/Gemini Provider)
 ENV OPENCLAW_MODEL_PRIMARY=gemini-2.5-flash-preview-09-2025
+ENV OPENCLAW_PROVIDER_PRIMARY=google
 ENV OPENCLAW_GATEWAY_MODE=local
 
-# Explicitly disable Telegram in the config to save RAM
-RUN echo '{"gateway": {"mode": "local"}, "channels": {"telegram": {"enabled": false}}}' > /home/node/.openclaw/openclaw.json
+# Hardcoded config to ensure Telegram is OFF and Google is ON
+RUN echo '{"gateway": {"mode": "local"}, "channels": {"telegram": {"enabled": false}}, "providers": {"primary": "google"}}' > /home/node/.openclaw/openclaw.json
 
-# 6. THE WEB TERMINAL ORCHESTRATOR
+# 6. THE AUTO-AUTH ORCHESTRATOR
 RUN cat << 'EOF' > /home/node/orchestrator.js
 const { exec, spawn } = require('child_process');
 const http = require('http');
 
-console.log("[SYSTEM] Booting Web Terminal Orchestrator...");
+console.log("[SYSTEM] Booting Auto-Auth Orchestrator...");
 const port = process.env.PORT || 8000;
+
+// STEP 1: FORCE AUTHENTICATION (Fixes the "No API key found" error)
+const apiKey = process.env.OPENCLAW_SECRET_GOOGLE_API_KEY;
+if (!apiKey) {
+    console.error("[CRITICAL] OPENCLAW_SECRET_GOOGLE_API_KEY is missing from Render Variables!");
+} else {
+    console.log("[SYSTEM] Injecting Gemini Auth Profiles...");
+    exec(`openclaw auth add --provider google --key ${apiKey}`, (err) => {
+        if (err) console.error("[AUTH ERROR]", err);
+        else console.log("[SYSTEM] Gemini Auth Verified. ✓");
+    });
+}
 
 const HTML = `
 <!DOCTYPE html>
@@ -46,15 +59,15 @@ const HTML = `
         .input-area { display: flex; gap: 10px; }
         input { flex-grow: 1; background: #111; color: #00ff41; border: 1px solid #333; padding: 15px; font-family: inherit; font-size: 16px; outline: none; }
         button { background: #00ff41; color: #000; border: none; padding: 15px 30px; cursor: pointer; font-weight: bold; font-family: inherit; }
-        .u { color: #008f11; } /* User */
-        .b { color: #fff; }    /* Bot */
+        .u { color: #008f11; } 
+        .b { color: #fff; }    
     </style>
 </head>
 <body>
-    <div style="margin-bottom:10px;">[ STATUS: CONNECTED ] [ AGENT: MAIN ]</div>
-    <div id="chat">BOT: System ready. What is your command, Master?</div>
+    <div style="margin-bottom:10px;">[ STATUS: AUTH_INJECTED ] [ PROVIDER: GOOGLE ]</div>
+    <div id="chat">BOT: Gemini Link established. I am ready for orders.</div>
     <div class="input-area">
-        <input type="text" id="cmd" placeholder="Type a task (e.g. 'check my debt')" autocomplete="off" onkeypress="if(event.key === 'Enter') send()">
+        <input type="text" id="cmd" placeholder="Ask a question..." autocomplete="off" onkeypress="if(event.key === 'Enter') send()">
         <button onclick="send()">RUN</button>
     </div>
     <script>
@@ -63,13 +76,13 @@ const HTML = `
             const chat = document.getElementById('chat');
             if(!i.value) return;
             
-            chat.innerHTML += '\\n\\n<span class="u">>>> ' + i.value + '</span>\\n<span style="color:#444">Processing...</span>';
+            chat.innerHTML += '\\n\\n<span class="u">>>> ' + i.value + '</span>\\n<span style="color:#444">Thinking...</span>';
             chat.scrollTop = chat.scrollHeight;
             
             fetch('/execute', { method: 'POST', body: i.value })
                 .then(r => r.text())
                 .then(t => {
-                    chat.innerHTML = chat.innerHTML.replace('<span style="color:#444">Processing...</span>', '') + '<span class="b">' + t + '</span>';
+                    chat.innerHTML = chat.innerHTML.replace('<span style="color:#444">Thinking...</span>', '') + '<span class="b">' + t + '</span>';
                     chat.scrollTop = chat.scrollHeight;
                 });
             i.value = '';
@@ -87,7 +100,8 @@ http.createServer((req, res) => {
         req.on('data', c => b += c);
         req.on('end', () => {
             console.log(`[EXEC] ${b}`);
-            const cmd = `openclaw agent --agent main --message "${b.replace(/"/g, '\\"')}"`;
+            // Force the agent to use the google provider in the command
+            const cmd = `openclaw agent --agent main --provider google --message "${b.replace(/"/g, '\\"')}"`;
             exec(cmd, (err, stdout, stderr) => {
                 res.writeHead(200, { 'Content-Type': 'text/plain' });
                 res.end(stdout || stderr || "Task complete.");
@@ -96,9 +110,8 @@ http.createServer((req, res) => {
     }
 }).listen(port, '0.0.0.0', () => console.log(`[SYSTEM] Terminal Live on ${port}`));
 
-// Background Autopilot
 setInterval(() => {
-    spawn('openclaw', ['agent', '--agent', 'main', '--message', 'Perform background scavenging.'], { shell: true });
+    spawn('openclaw', ['agent', '--agent', 'main', '--provider', 'google', '--message', 'Perform background scavenging.'], { shell: true });
 }, 300000);
 EOF
 
