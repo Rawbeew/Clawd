@@ -19,35 +19,37 @@ USER node
 RUN mkdir -p /home/node/.openclaw/agents/main/sessions /home/node/.openclaw/vault
 WORKDIR /home/node
 
-# 5. THE ULTIMATE OVERRIDE (Pure Environment Variables)
-# By setting these as ENV, OpenClaw cannot ignore them or overwrite them.
+# 5. ENVIRONMENT VARIABLES (Forcing Local Mode)
 ENV OPENCLAW_MODEL_PRIMARY=gemini-2.5-flash-preview-09-2025
 ENV OPENCLAW_CHANNEL_TELEGRAM_ENABLED=true
 ENV OPENCLAW_CHANNEL_TELEGRAM_DM_POLICY=open
 ENV OPENCLAW_CHANNEL_TELEGRAM_GROUP_POLICY=open
-# THE FIX: Hardcoding the asterisk directly into the container's memory
 ENV OPENCLAW_CHANNEL_TELEGRAM_ALLOW_FROM="*"
 ENV OPENCLAW_CHANNEL_TELEGRAM_GROUP_ALLOW_FROM="*"
+ENV OPENCLAW_GATEWAY_MODE=local
 
-# 6. THE LOUD ORCHESTRATOR
+# 6. BULLETPROOF CONFIG FILE (Satisfies all of OpenClaw's strict checks)
+RUN echo '{"gateway": {"mode": "local"}, "channels": {"telegram": {"enabled": true, "dmPolicy": "open", "groupPolicy": "open", "allowFrom": ["*"], "groupAllowFrom": ["*"]}}}' > /home/node/.openclaw/openclaw.json
+
+# 7. THE LOUD ORCHESTRATOR
 RUN cat << 'EOF' > /home/node/orchestrator.js
 const { spawn } = require('child_process');
 const http = require('http');
 
-console.log("[SYSTEM] Booting Pure ENV Orchestrator...");
+console.log("[SYSTEM] Booting Ultimate Orchestrator...");
 
 // 1. Instantly Bind Port for Render
 const port = process.env.PORT || 8000;
 http.createServer((req, res) => {
     res.writeHead(200);
-    res.end("SERF IGNITED - DOORS WIDE OPEN");
+    res.end("SERF IGNITED - READY");
 }).listen(port, '0.0.0.0', () => {
     console.log(`[SYSTEM] Port ${port} Secured.`);
 });
 
-// 2. IGNITE TELEGRAM GATEWAY
+// 2. IGNITE TELEGRAM GATEWAY (Added --allow-unconfigured to bypass all setup blocks)
 console.log("[SYSTEM] IGNITING TELEGRAM GATEWAY...");
-const gateway = spawn('openclaw', ['gateway', '--force'], { 
+const gateway = spawn('openclaw', ['gateway', '--force', '--allow-unconfigured'], { 
     stdio: 'inherit',
     shell: true,
     env: { ...process.env, DEBUG: 'openclaw:*' }
@@ -74,5 +76,5 @@ EOF
 
 EXPOSE 8000
 
-# 7. BOOT
+# 8. BOOT
 CMD ["node", "/home/node/orchestrator.js"]
