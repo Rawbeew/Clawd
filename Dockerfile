@@ -19,21 +19,20 @@ USER node
 RUN mkdir -p /home/node/.openclaw/agents/main/sessions /home/node/.openclaw/vault
 WORKDIR /home/node
 
-# 5. AGENT CONFIGURATION (Force-Open all Doors via ENV variables)
+# 5. AGENT CONFIGURATION (Force-Open all Doors)
 ENV OPENCLAW_MODEL_PRIMARY=gemini-2.5-flash-preview-09-2025
 ENV OPENCLAW_CHANNEL_TELEGRAM_DM_POLICY=open
 ENV OPENCLAW_CHANNEL_TELEGRAM_GROUP_POLICY=open
 ENV OPENCLAW_CHANNEL_TELEGRAM_ENABLED=true
 
-# Force-Open all Doors via hardcoded config file (Guarantees the Doctor warning disappears)
 RUN echo '{"gateway": {"mode": "local"}, "channels": {"telegram": {"enabled": true, "dmPolicy": "open", "groupPolicy": "open"}}}' > /home/node/.openclaw/openclaw.json
 
-# 6. THE DIRECT IGNITION ORCHESTRATOR
+# 6. THE LOUD ORCHESTRATOR
 RUN cat << 'EOF' > /home/node/orchestrator.js
 const { spawn } = require('child_process');
 const http = require('http');
 
-console.log("[SYSTEM] Booting Direct Ignition Orchestrator...");
+console.log("[SYSTEM] Booting Loud Orchestrator...");
 
 // 1. Instantly Bind Port for Render
 const port = process.env.PORT || 8000;
@@ -44,11 +43,16 @@ http.createServer((req, res) => {
     console.log(`[SYSTEM] Port ${port} Secured.`);
 });
 
-// 2. SKIP DOCTOR, DIRECTLY START GATEWAY
+// 2. IGNITE TELEGRAM GATEWAY (With Shell True and Error Catching)
 console.log("[SYSTEM] IGNITING TELEGRAM GATEWAY...");
 const gateway = spawn('openclaw', ['gateway', '--force'], { 
     stdio: 'inherit',
+    shell: true, // CRITICAL FIX: Forces the Docker terminal to find the openclaw command
     env: { ...process.env, DEBUG: 'openclaw:*' }
+});
+
+gateway.on('error', (err) => {
+    console.error(`\n[SPAWN ERROR] Could not find or run OpenClaw:`, err);
 });
 
 gateway.on('close', (code) => {
@@ -58,7 +62,11 @@ gateway.on('close', (code) => {
 // 3. START LABOR TICKER
 setInterval(() => {
     console.log("[SYSTEM] Labor Tick Started.");
-    spawn('openclaw', ['agent', '--agent', 'main', '--message', 'Scavenge non-KYC bounties.'], { stdio: 'inherit' });
+    const task = spawn('openclaw', ['agent', '--agent', 'main', '--message', 'Scavenge non-KYC bounties.'], { 
+        stdio: 'inherit',
+        shell: true 
+    });
+    task.on('error', (err) => console.error('[LABOR ERROR]', err));
 }, 180000);
 EOF
 
