@@ -19,20 +19,22 @@ USER node
 RUN mkdir -p /home/node/.openclaw/agents/main/sessions /home/node/.openclaw/vault
 WORKDIR /home/node
 
-# 5. AGENT CONFIGURATION (Force-Open all Doors)
+# 5. THE ULTIMATE OVERRIDE (Pure Environment Variables)
+# By setting these as ENV, OpenClaw cannot ignore them or overwrite them.
 ENV OPENCLAW_MODEL_PRIMARY=gemini-2.5-flash-preview-09-2025
+ENV OPENCLAW_CHANNEL_TELEGRAM_ENABLED=true
 ENV OPENCLAW_CHANNEL_TELEGRAM_DM_POLICY=open
 ENV OPENCLAW_CHANNEL_TELEGRAM_GROUP_POLICY=open
-ENV OPENCLAW_CHANNEL_TELEGRAM_ENABLED=true
-
-RUN echo '{"gateway": {"mode": "local"}, "channels": {"telegram": {"enabled": true, "dmPolicy": "open", "groupPolicy": "open"}}}' > /home/node/.openclaw/openclaw.json
+# THE FIX: Hardcoding the asterisk directly into the container's memory
+ENV OPENCLAW_CHANNEL_TELEGRAM_ALLOW_FROM="*"
+ENV OPENCLAW_CHANNEL_TELEGRAM_GROUP_ALLOW_FROM="*"
 
 # 6. THE LOUD ORCHESTRATOR
 RUN cat << 'EOF' > /home/node/orchestrator.js
 const { spawn } = require('child_process');
 const http = require('http');
 
-console.log("[SYSTEM] Booting Loud Orchestrator...");
+console.log("[SYSTEM] Booting Pure ENV Orchestrator...");
 
 // 1. Instantly Bind Port for Render
 const port = process.env.PORT || 8000;
@@ -43,11 +45,11 @@ http.createServer((req, res) => {
     console.log(`[SYSTEM] Port ${port} Secured.`);
 });
 
-// 2. IGNITE TELEGRAM GATEWAY (With Shell True and Error Catching)
+// 2. IGNITE TELEGRAM GATEWAY
 console.log("[SYSTEM] IGNITING TELEGRAM GATEWAY...");
 const gateway = spawn('openclaw', ['gateway', '--force'], { 
     stdio: 'inherit',
-    shell: true, // CRITICAL FIX: Forces the Docker terminal to find the openclaw command
+    shell: true,
     env: { ...process.env, DEBUG: 'openclaw:*' }
 });
 
