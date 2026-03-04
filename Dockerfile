@@ -19,7 +19,7 @@ USER node
 RUN mkdir -p /home/node/.openclaw/agents/main/sessions /home/node/.openclaw/vault
 WORKDIR /home/node
 
-# 5. ENVIRONMENT VARIABLES (Forcing Local Mode)
+# 5. ENVIRONMENT VARIABLES
 ENV OPENCLAW_MODEL_PRIMARY=gemini-2.5-flash-preview-09-2025
 ENV OPENCLAW_CHANNEL_TELEGRAM_ENABLED=true
 ENV OPENCLAW_CHANNEL_TELEGRAM_DM_POLICY=open
@@ -28,53 +28,64 @@ ENV OPENCLAW_CHANNEL_TELEGRAM_ALLOW_FROM="*"
 ENV OPENCLAW_CHANNEL_TELEGRAM_GROUP_ALLOW_FROM="*"
 ENV OPENCLAW_GATEWAY_MODE=local
 
-# 6. BULLETPROOF CONFIG FILE (Satisfies all of OpenClaw's strict checks)
 RUN echo '{"gateway": {"mode": "local"}, "channels": {"telegram": {"enabled": true, "dmPolicy": "open", "groupPolicy": "open", "allowFrom": ["*"], "groupAllowFrom": ["*"]}}}' > /home/node/.openclaw/openclaw.json
 
-# 7. THE LOUD ORCHESTRATOR
+# 6. THE DIAGNOSTIC ORCHESTRATOR
 RUN cat << 'EOF' > /home/node/orchestrator.js
 const { spawn } = require('child_process');
 const http = require('http');
+const https = require('https');
 
-console.log("[SYSTEM] Booting Ultimate Orchestrator...");
+console.log("\n=======================================");
+console.log("[DIAGNOSTIC] SYSTEM BOOTING...");
+console.log("=======================================\n");
 
-// 1. Instantly Bind Port for Render
+// Instantly Bind Port for Render
 const port = process.env.PORT || 8000;
-http.createServer((req, res) => {
-    res.writeHead(200);
-    res.end("SERF IGNITED - READY");
-}).listen(port, '0.0.0.0', () => {
-    console.log(`[SYSTEM] Port ${port} Secured.`);
-});
+http.createServer((req, res) => { res.writeHead(200); res.end("DIAGNOSTIC MODE ACTIVE"); }).listen(port, '0.0.0.0');
 
-// 2. IGNITE TELEGRAM GATEWAY (Added --allow-unconfigured to bypass all setup blocks)
-console.log("[SYSTEM] IGNITING TELEGRAM GATEWAY...");
-const gateway = spawn('openclaw', ['gateway', '--force', '--allow-unconfigured'], { 
-    stdio: 'inherit',
-    shell: true,
-    env: { ...process.env, DEBUG: 'openclaw:*' }
-});
+// STEP 1: TEST TELEGRAM TOKEN DIRECTLY
+const token = process.env.OPENCLAW_SECRET_TELEGRAM_BOT_TOKEN || "MISSING";
+console.log(`[DIAGNOSTIC] Checking Telegram Token (Length: ${token.length} characters)...`);
 
-gateway.on('error', (err) => {
-    console.error(`\n[SPAWN ERROR] Could not find or run OpenClaw:`, err);
-});
+https.get(`https://api.telegram.org/bot${token}/getMe`, (res) => {
+    let data = '';
+    res.on('data', chunk => data += chunk);
+    res.on('end', () => {
+        console.log("\n[DIAGNOSTIC] TELEGRAM API RAW RESPONSE:");
+        console.log(data);
+        console.log("=======================================\n");
 
-gateway.on('close', (code) => {
-    console.error(`\n[FATAL] Gateway crashed (Code ${code}). Check API Keys.\n`);
-});
+        if (data.includes("Unauthorized") || data.includes("Not Found")) {
+            console.error("[CRITICAL ERROR] YOUR TELEGRAM TOKEN IS INVALID OR MISSING!");
+            console.error("The bot will remain dead until you fix OPENCLAW_SECRET_TELEGRAM_BOT_TOKEN in Render.");
+            return; // STOP EXECUTION
+        }
 
-// 3. START LABOR TICKER
-setInterval(() => {
-    console.log("[SYSTEM] Labor Tick Started.");
-    const task = spawn('openclaw', ['agent', '--agent', 'main', '--message', 'Scavenge non-KYC bounties.'], { 
-        stdio: 'inherit',
-        shell: true 
+        console.log("[DIAGNOSTIC] TELEGRAM TOKEN IS VALID! ✓");
+        
+        // STEP 2: CHECK GEMINI KEY PRESENCE
+        const gemini = process.env.OPENCLAW_SECRET_GOOGLE_API_KEY || "MISSING";
+        if (gemini === "MISSING" || gemini.length < 10) {
+            console.error("[CRITICAL ERROR] OPENCLAW_SECRET_GOOGLE_API_KEY is missing or too short!");
+            return; // STOP EXECUTION
+        }
+        console.log("[DIAGNOSTIC] GEMINI KEY DETECTED! ✓\n");
+
+        // STEP 3: IGNITE OPENCLAW
+        console.log("[SYSTEM] IGNITING TELEGRAM GATEWAY...");
+        const gateway = spawn('openclaw', ['gateway', '--force', '--allow-unconfigured'], { 
+            stdio: 'inherit',
+            shell: true,
+            env: { ...process.env, DEBUG: 'openclaw:*' }
+        });
+
+        gateway.on('close', (code) => console.error(`\n[FATAL] Gateway crashed (Code ${code}).`));
     });
-    task.on('error', (err) => console.error('[LABOR ERROR]', err));
-}, 180000);
+}).on('error', (e) => {
+    console.error("[DIAGNOSTIC] Network Error reaching Telegram API:", e);
+});
 EOF
 
 EXPOSE 8000
-
-# 8. BOOT
 CMD ["node", "/home/node/orchestrator.js"]
