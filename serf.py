@@ -1,7 +1,7 @@
 #!/usr/bin/env python
-"""Clawd — digital serf: persistent local agent with memory, tools, autonomy.
+"""Serf — digital serf: persistent local agent with memory, tools, autonomy.
 
-Pure stdlib. Run `python clawd.py --demo` for a walkthrough.
+Pure stdlib. Run `python serf.py --demo` for a walkthrough.
 """
 import argparse
 import json
@@ -66,12 +66,13 @@ def set_planner(fn):
 def run(goal, max_steps=8):
     """Autonomous loop: plan -> act -> observe -> reflect."""
     trace, obs = [], f"goal received: {goal}"
+    acted = False
     for step in range(max_steps):
         if _planner:
             decision = _planner(goal, obs)
         else:  # default heuristic planner: keyword routing over the registry
             decision = _heuristic(goal, obs)
-        if not decision or (decision[0] == "query_memory" and not str(obs).startswith("goal")):
+        if not decision or (acted and decision[0] == "query_memory"):
             break  # answered — stop reflecting
         name, kwargs = decision
         entry = _TOOLS.get(name)
@@ -79,6 +80,7 @@ def run(goal, max_steps=8):
         obs = entry["fn"](**kwargs) if entry else f"unknown tool {name}"
         if obs == prev_obs:
             break  # no new information
+        acted = True
         trace.append({"step": step + 1, "tool": name, "args": kwargs,
                       "observation": str(obs)[:200]})
     return trace
@@ -96,7 +98,7 @@ def _heuristic(goal, obs):
 # ---------------------------------------------------------------- cli
 
 def demo():
-    print("== Clawd demo: autonomous loop ==")
+    print("== Serf demo: autonomous loop ==")
     t1 = run("remember my favorite color is teal")
     t2 = run("what is my favorite color?")
     for tr in (t1, t2):
@@ -105,7 +107,7 @@ def demo():
     print("memory.json episodes:", len(_load_memory()["episodes"]))
 
 if __name__ == "__main__":
-    ap = argparse.ArgumentParser(description="Clawd digital serf")
+    ap = argparse.ArgumentParser(description="Serf digital serf")
     ap.add_argument("--goal")
     ap.add_argument("--demo", action="store_true")
     args = ap.parse_args()
